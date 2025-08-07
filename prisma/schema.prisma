@@ -1,0 +1,189 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  role      UserRole @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  userCompanies UserCompany[]
+  invitesSent   CompanyInvite[] @relation("InvitedBy")
+
+  @@map("users")
+}
+
+model Company {
+  id          String        @id @default(uuid())
+  name        String
+  slug        String        @unique
+  description String?
+  hqCity      String?
+  hqState     String?
+  hqCountry   String        @default("US")
+  yearFounded Int?
+  sizeBucket  CompanySize?
+  phone       String?
+  salesEmail  String?
+  websiteUrl  String?
+  logoUrl     String?
+  logoBytes   Int?
+  status      CompanyStatus @default(PENDING)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  deletedAt   DateTime?
+
+  userCompanies     UserCompany[]
+  invites           CompanyInvite[]
+  services          CompanyService[]
+  industries        CompanyIndustry[]
+  locationsServed   CompanyLocationServed[]
+  certifications    CompanyCertification[]
+
+  @@map("companies")
+}
+
+model UserCompany {
+  id        String              @id @default(uuid())
+  userId    String
+  companyId String
+  relation  UserCompanyRelation @default(MEMBER)
+  createdAt DateTime            @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@map("user_companies")
+}
+
+model CompanyInvite {
+  id        String    @id @default(uuid())
+  companyId String
+  email     String
+  invitedBy String
+  accepted  Boolean   @default(false)
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  inviter User    @relation("InvitedBy", fields: [invitedBy], references: [id])
+
+  @@unique([companyId, email])
+  @@map("company_invites")
+}
+
+model CompanyService {
+  id        String  @id @default(uuid())
+  companyId String
+  service   Service
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, service])
+  @@map("company_services")
+}
+
+model CompanyIndustry {
+  id        String   @id @default(uuid())
+  companyId String
+  industry  Industry
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, industry])
+  @@map("company_industries")
+}
+
+model CompanyLocationServed {
+  id        String  @id @default(uuid())
+  companyId String
+  country   String
+  state     String?
+  region    String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, country, state, region])
+  @@map("company_locations_served")
+}
+
+model CompanyCertification {
+  id            String        @id @default(uuid())
+  companyId     String
+  certification Certification
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, certification])
+  @@map("company_certifications")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum CompanyStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum CompanySize {
+  SIZE_1_10
+  SIZE_11_50
+  SIZE_51_200
+  SIZE_201_500
+  SIZE_501_1000
+  SIZE_1001_5000
+  SIZE_5001_10000
+  SIZE_10000_PLUS
+}
+
+enum UserCompanyRelation {
+  OWNER
+  MEMBER
+}
+
+enum Service {
+  CONTROL_PANEL_ASSEMBLY
+  SYSTEM_INTEGRATION
+  CALIBRATION_SERVICES
+}
+
+enum Industry {
+  MANUFACTURING
+  OIL_GAS
+  CHEMICAL_PETROCHEMICAL
+  FOOD_BEVERAGE
+  PHARMACEUTICAL
+  AUTOMOTIVE
+  AEROSPACE
+  WATER_WASTEWATER
+  POWER_UTILITIES
+  MINING_METALS
+}
+
+enum Certification {
+  UL_508A
+  ISO_9001
+  ISO_14001
+  OHSAS_18001
+  IEC_61511
+  ISA_84
+  NFPA_70E
+  OSHA_10
+  OSHA_30
+  SIL_CERTIFIED
+}
