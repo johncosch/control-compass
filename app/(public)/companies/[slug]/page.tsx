@@ -1,10 +1,10 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
-import { prisma } from "@/lib/prisma"
+import { getCompanyBySlug } from "@/lib/supabase/database"
 import Image from "next/image"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
-import { MapPin, Phone, Mail, Globe, Calendar, Users, Building, ChevronLeft } from "lucide-react"
+import { MapPin, Phone, Mail, Globe, Calendar, Users, Building, ChevronLeft } from 'lucide-react'
 
 interface Props {
   params: {
@@ -74,17 +74,8 @@ const formatCompanySize = (sizeBucket: string) => {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   try {
     const { slug } = await params
-    const company = await prisma.company.findUnique({
-      where: { 
-        slug: slug,
-        status: "APPROVED"
-      },
-      select: {
-        name: true,
-        description: true
-      }
-    })
-
+    const company = await getCompanyBySlug(slug)
+    
     if (!company) {
       return {
         title: "Company Not Found",
@@ -105,40 +96,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function CompanyPage({ params }: Props) {
   try {
     const { slug } = await params
-    const company = await prisma.company.findUnique({
-      where: {
-        slug: slug,
-        status: "APPROVED"
-      },
-      include: {
-        services: {
-          select: { service: true }
-        },
-        certifications: {
-          select: { certification: true }
-        },
-        locationsServed: {
-          select: { country: true, state: true, region: true }
-        },
-        userCompanies: {
-          include: {
-            user: {
-              select: { name: true, email: true }
-            }
-          },
-          where: {
-            relation: "OWNER"
-          },
-          take: 1
-        }
-      }
-    })
-
+    const company = await getCompanyBySlug(slug)
+    
     if (!company) {
       notFound()
     }
-
-    const owner = company.userCompanies?.[0]?.user
 
     return (
       <div className="min-h-screen bg-stone-50">
@@ -161,7 +123,7 @@ export default async function CompanyPage({ params }: Props) {
               <div className="flex-shrink-0">
                 {company.logoUrl ? (
                   <Image
-                    src={company.logoUrl}
+                    src={company.logoUrl || "/placeholder.svg"}
                     alt={`${company.name} logo`}
                     width={120}
                     height={120}
@@ -177,7 +139,7 @@ export default async function CompanyPage({ params }: Props) {
               {/* Company Info */}
               <div className="flex-1">
                 <h1 className="text-4xl md:text-5xl font-bold text-white mb-6">{company.name}</h1>
-
+                
                 {/* Basic Info */}
                 <div className="flex flex-wrap gap-6 text-slate-300 mb-6">
                   {company.hqCity && company.hqState && (
@@ -188,14 +150,12 @@ export default async function CompanyPage({ params }: Props) {
                       </span>
                     </div>
                   )}
-
                   {company.yearFounded && (
                     <div className="flex items-center gap-2">
                       <Calendar className="w-5 h-5" />
                       <span className="font-medium">Founded {company.yearFounded}</span>
                     </div>
                   )}
-
                   {company.sizeBucket && (
                     <div className="flex items-center gap-2">
                       <Users className="w-5 h-5" />
@@ -283,7 +243,6 @@ export default async function CompanyPage({ params }: Props) {
                       </a>
                     </div>
                   )}
-
                   {company.phone && (
                     <div className="flex items-center gap-4 p-3 bg-stone-50 rounded-lg">
                       <Phone className="w-5 h-5 text-slate-600" />
@@ -292,7 +251,6 @@ export default async function CompanyPage({ params }: Props) {
                       </a>
                     </div>
                   )}
-
                   {company.salesEmail && (
                     <div className="flex items-center gap-4 p-3 bg-stone-50 rounded-lg">
                       <Mail className="w-5 h-5 text-slate-600" />
@@ -339,7 +297,6 @@ export default async function CompanyPage({ params }: Props) {
                 </p>
                 <p className="text-sm text-slate-500">© 2024 Control Compass by IOThrifty. All rights reserved.</p>
               </div>
-
               <div>
                 <h3 className="font-semibold text-white mb-4">For Customers</h3>
                 <ul className="space-y-2 text-sm">
@@ -375,7 +332,6 @@ export default async function CompanyPage({ params }: Props) {
                   </li>
                 </ul>
               </div>
-
               <div>
                 <h3 className="font-semibold text-white mb-4">For Providers</h3>
                 <ul className="space-y-2 text-sm">
