@@ -190,7 +190,7 @@ export default async function HomePage() {
             <div className="flex justify-center">
               <div className="bg-white p-8 rounded-lg shadow-lg border border-stone-200">
                 <Image
-                  src="/images/LogoRegisterSquare_1999px.svg"
+                  src="/images/LogoRegisterSquare_1999px.png"
                   alt="IOThrifty - Industrial Components Store"
                   width={300}
                   height={200}
