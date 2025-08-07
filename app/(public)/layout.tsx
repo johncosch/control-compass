@@ -40,6 +40,7 @@ export default async function PublicLayout({
                   width={200}
                   height={80}
                   className="h-12 w-auto"
+                  priority
                 />
               </Link>
               <div className="flex gap-3 items-center">
@@ -50,7 +51,9 @@ export default async function PublicLayout({
                 </Button>
                 {user ? (
                   <>
-                    <span className="text-sm text-slate-600">{user.user_metadata?.full_name || user.email}</span>
+                    <span className="text-sm text-slate-600">
+                      {user.user_metadata?.full_name || user.email}
+                    </span>
                     <Button
                       asChild
                       variant="outline"
@@ -78,7 +81,7 @@ export default async function PublicLayout({
           </div>
         </header>
       )}
-      
+
       <main>{children}</main>
     </div>
   )

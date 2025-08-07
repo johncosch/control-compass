@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/server"
 import { HomeHeroSearch } from "@/src/components/domain/home/home-hero-search"
 import { Card, CardContent } from "@/components/ui/card"
-import { Building2, Cog, FlaskConical, Search, Users, CheckCircle } from "lucide-react"
+import { Building2, Cog, FlaskConical, Search, Users, CheckCircle } from 'lucide-react'
 import type { Metadata } from "next"
 
 export const metadata: Metadata = {
@@ -32,6 +32,7 @@ export default async function HomePage() {
                 width={200}
                 height={80}
                 className="h-12 w-auto"
+                priority
               />
             </Link>
             <div className="flex gap-3 items-center">
@@ -42,7 +43,9 @@ export default async function HomePage() {
               </Button>
               {user ? (
                 <>
-                  <span className="text-sm text-slate-600">{user.user_metadata?.full_name || user.email}</span>
+                  <span className="text-sm text-slate-600">
+                    {(user.user_metadata as any)?.full_name || user.email}
+                  </span>
                   <Button
                     asChild
                     variant="outline"
@@ -79,10 +82,12 @@ export default async function HomePage() {
               Connect with verified control panel manufacturers, system integrators, and automation specialists for your
               next project
             </p>
+
             {/* Hero Search */}
             <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
               <HomeHeroSearch />
             </div>
+
             <p className="text-slate-500">
               Browse <strong>verified companies</strong> • Compare services • Get quotes
             </p>
@@ -99,6 +104,7 @@ export default async function HomePage() {
               Whether you're a manufacturer, facility manager, or engineer, finding the right control systems partner
               shouldn't be complicated.
             </p>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               <div className="text-center">
                 <div className="w-16 h-16 bg-stone-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -109,6 +115,7 @@ export default async function HomePage() {
                   Filter through our curated list of control specialists by services, location, and industry expertise.
                 </p>
               </div>
+
               <div className="text-center">
                 <div className="w-16 h-16 bg-stone-100 rounded-full flex items-center justify-center mx-auto mb-6">
                   <Users className="w-8 h-8 text-slate-700" />
@@ -118,14 +125,13 @@ export default async function HomePage() {
                   Review company profiles, certifications, and past projects to create a shortlist that fits your needs.
                 </p>
               </div>
+
               <div className="text-center">
                 <div className="w-16 h-16 bg-stone-100 rounded-full flex items-center justify-center mx-auto mb-6">
                   <CheckCircle className="w-8 h-8 text-slate-700" />
                 </div>
                 <h3 className="text-xl font-semibold text-slate-900 mb-4">3. Connect & Hire</h3>
-                <p className="text-slate-600">
-                  Reach out directly to your chosen partners and get your control systems project started.
-                </p>
+                <p className="text-slate-600">Reach out directly to your chosen partners and get your control systems project started.</p>
               </div>
             </div>
           </div>
@@ -146,6 +152,7 @@ export default async function HomePage() {
                   one-stop shop for quality industrial components at competitive prices.
                 </p>
               </div>
+
               <div className="flex flex-col sm:flex-row gap-4">
                 <Button asChild size="lg" className="bg-[#18763c] hover:bg-[#145a30] text-white">
                   <a href="https://www.iothrifty.com/" target="_blank" rel="noopener noreferrer">
@@ -163,43 +170,27 @@ export default async function HomePage() {
                   </a>
                 </Button>
               </div>
+
               <div className="flex items-center space-x-4 text-sm text-slate-500">
                 <div className="flex items-center">
-                  <svg className="w-4 h-4 mr-1 text-[#18763c]" fill="currentColor" viewBox="0 0 20 20">
-                    <path
-                      fillRule="evenodd"
-                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+                  <CheckCircle className="w-4 h-4 mr-1 text-[#18763c]" />
                   Fast Shipping
                 </div>
                 <div className="flex items-center">
-                  <svg className="w-4 h-4 mr-1 text-[#18763c]" fill="currentColor" viewBox="0 0 20 20">
-                    <path
-                      fillRule="evenodd"
-                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+                  <CheckCircle className="w-4 h-4 mr-1 text-[#18763c]" />
                   Quality Products
                 </div>
                 <div className="flex items-center">
-                  <svg className="w-4 h-4 mr-1 text-[#18763c]" fill="currentColor" viewBox="0 0 20 20">
-                    <path
-                      fillRule="evenodd"
-                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+                  <CheckCircle className="w-4 h-4 mr-1 text-[#18763c]" />
                   Expert Support
                 </div>
               </div>
             </div>
+
             <div className="flex justify-center">
               <div className="bg-white p-8 rounded-lg shadow-lg border border-stone-200">
                 <Image
-                  src="/images/LogoRegisterSquare_1999px.png"
+                  src="/images/LogoRegisterSquare_1999px.svg"
                   alt="IOThrifty - Industrial Components Store"
                   width={300}
                   height={200}
@@ -221,6 +212,7 @@ export default async function HomePage() {
                 From custom control panels to complete automation solutions, find the right specialist for your project.
               </p>
             </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               <Card className="border-0 shadow-lg hover:shadow-xl transition-shadow">
                 <CardContent className="p-8 text-center">
@@ -241,6 +233,7 @@ export default async function HomePage() {
                   </Button>
                 </CardContent>
               </Card>
+
               <Card className="border-0 shadow-lg hover:shadow-xl transition-shadow">
                 <CardContent className="p-8 text-center">
                   <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -260,6 +253,7 @@ export default async function HomePage() {
                   </Button>
                 </CardContent>
               </Card>
+
               <Card className="border-0 shadow-lg hover:shadow-xl transition-shadow">
                 <CardContent className="p-8 text-center">
                   <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -294,6 +288,7 @@ export default async function HomePage() {
               by customers actively searching for control panel builders, system integrators, and automation
               specialists.
             </p>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
               <div className="text-center">
                 <div className="w-12 h-12 bg-stone-400 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -302,6 +297,7 @@ export default async function HomePage() {
                 <h3 className="text-lg font-semibold text-white mb-2">Create Your Profile</h3>
                 <p className="text-slate-300 text-sm">Showcase your services, certifications, and project experience</p>
               </div>
+
               <div className="text-center">
                 <div className="w-12 h-12 bg-stone-400 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-white font-bold">2</span>
@@ -309,16 +305,16 @@ export default async function HomePage() {
                 <h3 className="text-lg font-semibold text-white mb-2">Get Verified</h3>
                 <p className="text-slate-300 text-sm">Our team reviews your profile to ensure quality for customers</p>
               </div>
+
               <div className="text-center">
                 <div className="w-12 h-12 bg-stone-400 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-white font-bold">3</span>
                 </div>
                 <h3 className="text-lg font-semibold text-white mb-2">Connect with Customers</h3>
-                <p className="text-slate-300 text-sm">
-                  Receive inquiries from qualified prospects looking for your services
-                </p>
+                <p className="text-slate-300 text-sm">Receive inquiries from qualified prospects looking for your services</p>
               </div>
             </div>
+
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button asChild size="lg" className="bg-stone-400 hover:bg-stone-500 text-slate-950 font-semibold">
                 <Link href="/auth/signup">List Your Company Free</Link>
@@ -353,8 +349,8 @@ export default async function HomePage() {
                 verified control panel builders, system integrators, and automation specialists.
               </p>
               <div className="flex items-center space-x-2 text-sm text-slate-500">
-                <span>© 2024 Control Compass. All rights reserved.</span>
-                <span>•</span>
+                <span>{'© 2024 Control Compass. All rights reserved.'}</span>
+                <span>{'•'}</span>
                 <span>Powered by</span>
                 <a
                   href="https://www.iothrifty.com/"
@@ -366,6 +362,7 @@ export default async function HomePage() {
                 </a>
               </div>
             </div>
+
             <div>
               <h3 className="font-semibold text-white mb-4">For Customers</h3>
               <ul className="space-y-2 text-sm">
@@ -401,6 +398,7 @@ export default async function HomePage() {
                 </li>
               </ul>
             </div>
+
             <div>
               <h3 className="font-semibold text-white mb-4">For Providers</h3>
               <ul className="space-y-2 text-sm">

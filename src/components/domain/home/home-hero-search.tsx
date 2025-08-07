@@ -113,8 +113,8 @@ export function HomeHeroSearch() {
         {/* Service Filter */}
         <div>
           <label className="block text-sm font-medium text-slate-800 mb-2">Service Needed</label>
-          <Select value={selectedService} onValueChange={setSelectedService}>
-            <SelectTrigger className="w-full">
+          <Select value={selectedService} onValueChange={setSelectedService} >
+            <SelectTrigger className="w-full hover:cursor-pointer">
               <SelectValue placeholder="Select a service" />
             </SelectTrigger>
             <SelectContent>
@@ -132,7 +132,7 @@ export function HomeHeroSearch() {
           <label className="block text-sm font-medium text-slate-800 mb-2">Service Location</label>
           <Popover open={areasOpen} onOpenChange={setAreasOpen}>
             <PopoverTrigger asChild>
-              <Button variant="outline" className="w-full justify-between bg-transparent">
+              <Button variant="outline" className="w-full justify-between bg-transparent hover:cursor-pointer">
                 <div className="flex items-center gap-2">
                   <MapPin className="w-4 h-4" />
                   <span className="truncate">{getAreasDisplayText()}</span>
@@ -151,6 +151,7 @@ export function HomeHeroSearch() {
                     {US_STATES.map((state) => (
                       <div key={state.code} className="flex items-center space-x-2">
                         <Checkbox
+                          className="hover:cursor-pointer"
                           id={`hero-${state.code}`}
                           checked={selectedAreas.includes(state.code)}
                           onCheckedChange={(checked) => handleAreaChange(state.code, checked as boolean)}
@@ -165,7 +166,7 @@ export function HomeHeroSearch() {
 
                 {selectedAreas.length > 0 && (
                   <div className="pt-2 border-t">
-                    <Button variant="outline" size="sm" onClick={() => setSelectedAreas([])} className="w-full">
+                    <Button variant="outline" size="sm" onClick={() => setSelectedAreas([])} className="w-full hover:cursor-pointer">
                       Clear All
                     </Button>
                   </div>
@@ -176,7 +177,7 @@ export function HomeHeroSearch() {
         </div>
       </div>
 
-      <Button onClick={handleSearch} size="lg" className="w-full bg-slate-900 hover:bg-slate-950 text-white">
+      <Button onClick={handleSearch} size="lg" className="w-full bg-slate-900 hover:bg-slate-950 text-white hover:cursor-pointer">
         <Search className="w-5 h-5 mr-2" />
         Find Control Partners
       </Button>

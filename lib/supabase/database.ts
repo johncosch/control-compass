@@ -4,197 +4,470 @@ export interface Company {
   id: string;
   name: string;
   slug: string;
-  description: string | null;
-  websiteUrl: string | null;
-  logoUrl: string | null;
-  phone: string | null;
-  salesEmail: string | null;
-  hqAddress: string | null;
-  hqCity: string | null;
-  hqState: string | null;
-  hqZip: string | null;
-  hqCountry: string;
-  yearFounded: number | null;
-  sizeBucket: string | null;
-  status: "PENDING" | "APPROVED" | "REJECTED";
+  description?: string;
+  logoUrl?: string;
+  websiteUrl?: string;
+  phone?: string;
+  salesEmail?: string;
+  hqCity?: string;
+  hqState?: string;
+  hqCountry?: string;
+  yearFounded?: number;
+  sizeBucket?: string;
+  status: string;
   createdAt: string;
   updatedAt: string;
+  services?: { service: string }[];
+  certifications?: { certification: string }[];
+  locationsServed?: { country?: string; state?: string; region?: string }[];
+  userCompanies?: { user: { name?: string; email: string } }[];
 }
 
-export interface CompanyService {
-  service: string;
-}
-
-export interface CompanyCertification {
-  certification: string;
-}
-
-export interface CompanyLocationServed {
-  country: string;
-  state: string | null;
-  region: string | null;
-}
-
-export interface CompanyWithRelations extends Company {
-  services: CompanyService[];
-  certifications: CompanyCertification[];
-  locationsServed: CompanyLocationServed[];
-}
-
-export async function getApprovedCompanies(params: {
+export interface CompanyFilters {
   search?: string;
   service?: string;
   location?: string;
   size?: string;
   areasServed?: string;
   certifications?: string;
-  page?: number;
-  limit?: number;
-}) {
-  const supabase = await createClient();
-  const page = params.page || 1;
-  const limit = params.limit || 30;
-  const offset = (page - 1) * limit;
+  page: number;
+  limit: number;
+}
 
-  let query = supabase
-    .from("companies")
-    .select(
-      `
+export async function getCompanyBySlug(slug: string): Promise<Company | null> {
+  try {
+    console.log("🔍 Fetching company by slug:", slug);
+
+    const supabase = await createClient();
+
+    // First get the basic company data (use camelCase column names)
+    const { data: company, error } = await supabase
+      .from("companies")
+      .select(
+        `
       id,
       name,
       slug,
       description,
-      websiteUrl,
       logoUrl,
+      websiteUrl,
       phone,
       salesEmail,
-      hqAddress,
       hqCity,
       hqState,
-      hqZip,
       hqCountry,
       yearFounded,
       sizeBucket,
       status,
       createdAt,
-      updatedAt,
-      services:company_services(service),
-      certifications:company_certifications(certification),
-      locationsServed:company_locations_served(country, state, region)
+      updatedAt
     `
-    )
-    .eq("status", "APPROVED")
-    .order("createdAt", { ascending: true })
-    .range(offset, offset + limit - 1);
+      )
+      .eq("slug", slug)
+      .eq("status", "APPROVED")
+      .single();
 
-  // Apply search filter
-  if (params.search) {
-    query = query.or(
-      `name.ilike.%${params.search}%,description.ilike.%${params.search}%`
+    if (error) {
+      console.error(
+        "Error fetching company by slug:",
+        JSON.stringify(error, null, 2)
+      );
+      return null;
+    }
+
+    if (!company) {
+      console.log("❌ Company not found");
+      return null;
+    }
+
+    console.log("✅ Found basic company:", company.name);
+
+    // Get services
+    const { data: services, error: servicesError } = await supabase
+      .from("company_services")
+      .select("service")
+      .eq("companyId", company.id);
+
+    if (servicesError) {
+      console.error(
+        "Services query error:",
+        JSON.stringify(servicesError, null, 2)
+      );
+    }
+
+    // Get certifications
+    const { data: certifications, error: certificationsError } = await supabase
+      .from("company_certifications")
+      .select("certification")
+      .eq("companyId", company.id);
+
+    if (certificationsError) {
+      console.error(
+        "Certifications query error:",
+        JSON.stringify(certificationsError, null, 2)
+      );
+    }
+
+    // Get locations served
+    const { data: locationsServed, error: locationsError } = await supabase
+      .from("company_locations_served")
+      .select("country, state, region")
+      .eq("companyId", company.id);
+
+    if (locationsError) {
+      console.error(
+        "Locations query error:",
+        JSON.stringify(locationsError, null, 2)
+      );
+    }
+
+    // Get user companies (owners)
+    const { data: userCompanies, error: userCompaniesError } = await supabase
+      .from("user_companies")
+      .select(
+        `
+      users (
+        name,
+        email
+      )
+    `
+      )
+      .eq("companyId", company.id)
+      .eq("relation", "OWNER")
+      .limit(1);
+
+    if (userCompaniesError) {
+      console.error(
+        "User companies query error:",
+        JSON.stringify(userCompaniesError, null, 2)
+      );
+    }
+
+    // Transform the data to match the expected interface (already camelCase)
+    return {
+      id: company.id,
+      name: company.name,
+      slug: company.slug,
+      description: company.description,
+      logoUrl: company.logoUrl,
+      websiteUrl: company.websiteUrl,
+      phone: company.phone,
+      salesEmail: company.salesEmail,
+      hqCity: company.hqCity,
+      hqState: company.hqState,
+      hqCountry: company.hqCountry,
+      yearFounded: company.yearFounded,
+      sizeBucket: company.sizeBucket,
+      status: company.status,
+      createdAt: company.createdAt,
+      updatedAt: company.updatedAt,
+      services: services || [],
+      certifications: certifications || [],
+      locationsServed: locationsServed || [],
+      userCompanies:
+        userCompanies?.map((uc: any) => ({ user: uc.users })) || [],
+    };
+  } catch (error) {
+    console.error("Error in getCompanyBySlug:", error);
+    return null;
+  }
+}
+
+export async function getApprovedCompanies(filters: CompanyFilters) {
+  try {
+    console.log("🔍 Fetching companies with params:", filters);
+
+    const supabase = await createClient();
+    const { page, limit, ...searchFilters } = filters;
+    const offset = (page - 1) * limit;
+
+    // Base query with basic filters (use camelCase columns)
+    let baseQuery = supabase
+      .from("companies")
+      .select("*")
+      .eq("status", "APPROVED");
+
+    if (searchFilters.search) {
+      baseQuery = baseQuery.or(
+        `name.ilike.%${searchFilters.search}%,description.ilike.%${searchFilters.search}%`
+      );
+    }
+
+    if (searchFilters.location) {
+      baseQuery = baseQuery.eq("hqState", searchFilters.location);
+    }
+
+    if (searchFilters.size) {
+      baseQuery = baseQuery.eq("sizeBucket", searchFilters.size);
+    }
+
+    // Fetch companies
+    const { data: allCompanies, error: companiesError } = await baseQuery;
+
+    if (companiesError) {
+      console.error(
+        "Error fetching companies:",
+        JSON.stringify(companiesError, null, 2)
+      );
+      return { companies: [], totalCount: 0, totalPages: 0, currentPage: page };
+    }
+
+    console.log(
+      `✅ Found ${allCompanies?.length || 0} companies before service/cert filtering`
     );
-  }
 
-  // Apply location filter
-  if (params.location) {
-    query = query.eq("hqState", params.location);
-  }
+    let filteredCompanies = allCompanies || [];
 
-  // Apply size filter
-  if (params.size) {
-    query = query.eq("sizeBucket", params.size);
-  }
+    // Service filter
+    if (searchFilters.service) {
+      const { data: serviceData, error: serviceError } = await supabase
+        .from("company_services")
+        .select("companyId")
+        .eq("service", searchFilters.service);
 
-  const { data: companies, error } = await query;
+      if (serviceError) {
+        console.error(
+          "Error fetching service filter:",
+          JSON.stringify(serviceError, null, 2)
+        );
+      } else {
+        const serviceCompanyIds = (serviceData || []).map((s) => s.companyId);
+        filteredCompanies = filteredCompanies.filter((c) =>
+          serviceCompanyIds.includes(c.id)
+        );
+      }
+    }
 
-  if (error) {
-    console.error("Error fetching companies:", error);
-    return { companies: [], totalCount: 0, totalPages: 0, currentPage: page };
-  }
+    // Certifications filter
+    if (searchFilters.certifications) {
+      const selectedCertifications = searchFilters.certifications
+        .split(",")
+        .filter(Boolean);
+      if (selectedCertifications.length > 0) {
+        const { data: certData, error: certError } = await supabase
+          .from("company_certifications")
+          .select("companyId")
+          .in("certification", selectedCertifications);
 
-  // Get total count for pagination
-  let countQuery = supabase
-    .from("companies")
-    .select("*", { count: "exact", head: true })
-    .eq("status", "APPROVED");
+        if (certError) {
+          console.error(
+            "Error fetching certification filter:",
+            JSON.stringify(certError, null, 2)
+          );
+        } else {
+          const certCompanyIds = (certData || []).map((c) => c.companyId);
+          filteredCompanies = filteredCompanies.filter((c) =>
+            certCompanyIds.includes(c.id)
+          );
+        }
+      }
+    }
 
-  if (params.search) {
-    countQuery = countQuery.or(
-      `name.ilike.%${params.search}%,description.ilike.%${params.search}%`
+    // Areas served filter
+    if (searchFilters.areasServed) {
+      const areasServed = searchFilters.areasServed.split(",").filter(Boolean);
+      if (areasServed.length > 0) {
+        const stateConditions = areasServed.filter((a) => a.length === 2);
+        if (stateConditions.length > 0) {
+          const { data: locData, error: locError } = await supabase
+            .from("company_locations_served")
+            .select("companyId")
+            .or(
+              `state.in.(${stateConditions.join(",")}),and(country.eq.US,state.is.null)`
+            );
+
+          if (locError) {
+            console.error(
+              "Error fetching areas served filter:",
+              JSON.stringify(locError, null, 2)
+            );
+          } else {
+            const locCompanyIds = (locData || []).map((l) => l.companyId);
+            filteredCompanies = filteredCompanies.filter((c) =>
+              locCompanyIds.includes(c.id)
+            );
+          }
+        }
+      }
+    }
+
+    const totalCount = filteredCompanies.length;
+    const totalPages = Math.ceil(totalCount / limit);
+
+    // Pagination and sorting by createdAt (camelCase)
+    const paginatedCompanies = filteredCompanies
+      .sort(
+        (a: any, b: any) =>
+          new Date(a.createdAt as string).getTime() -
+          new Date(b.createdAt as string).getTime()
+      )
+      .slice(offset, offset + limit);
+
+    // Fetch relations per company
+    const companiesWithRelations = await Promise.all(
+      paginatedCompanies.map(async (company: any) => {
+        const [
+          { data: services },
+          { data: certifications },
+          { data: locationsServed },
+        ] = await Promise.all([
+          supabase
+            .from("company_services")
+            .select("service")
+            .eq("companyId", company.id),
+          supabase
+            .from("company_certifications")
+            .select("certification")
+            .eq("companyId", company.id),
+          supabase
+            .from("company_locations_served")
+            .select("country, state, region")
+            .eq("companyId", company.id),
+        ]);
+
+        return {
+          id: company.id,
+          name: company.name,
+          slug: company.slug,
+          description: company.description,
+          logoUrl: company.logoUrl,
+          websiteUrl: company.websiteUrl,
+          phone: company.phone,
+          salesEmail: company.salesEmail,
+          hqCity: company.hqCity,
+          hqState: company.hqState,
+          hqCountry: company.hqCountry,
+          yearFounded: company.yearFounded,
+          sizeBucket: company.sizeBucket,
+          status: company.status,
+          createdAt: company.createdAt,
+          updatedAt: company.updatedAt,
+          services: services || [],
+          certifications: certifications || [],
+          locationsServed: locationsServed || [],
+        } as Company;
+      })
     );
-  }
-  if (params.location) {
-    countQuery = countQuery.eq("hqState", params.location);
-  }
-  if (params.size) {
-    countQuery = countQuery.eq("sizeBucket", params.size);
-  }
 
-  const { count } = await countQuery;
-  const totalCount = count || 0;
-  const totalPages = Math.ceil(totalCount / limit);
+    console.log(
+      "📊 Returning",
+      companiesWithRelations.length,
+      "companies, total:",
+      totalCount
+    );
 
-  return {
-    companies: companies || [],
-    totalCount,
-    totalPages,
-    currentPage: page,
-  };
+    return {
+      companies: companiesWithRelations,
+      totalCount,
+      totalPages,
+      currentPage: page,
+    };
+  } catch (error) {
+    console.error("Error in getApprovedCompanies:", error);
+    return {
+      companies: [],
+      totalCount: 0,
+      totalPages: 0,
+      currentPage: filters.page,
+    };
+  }
 }
 
 export async function getFilterOptions() {
-  const supabase = await createClient();
-
   try {
-    // Get available services
-    const { data: services } = await supabase
-      .from("company_services")
-      .select("service")
-      .in("service", [
-        "CONTROL_PANEL_ASSEMBLY",
-        "SYSTEM_INTEGRATION",
-        "CALIBRATION_SERVICES",
-      ]);
+    console.log("🔍 Fetching filter options...");
 
-    // Get available locations
-    const { data: locations } = await supabase
+    const supabase = await createClient();
+
+    // Services
+    const { data: services, error: servicesError } = await supabase
+      .from("company_services")
+      .select("service");
+
+    if (servicesError) {
+      console.error(
+        "Error fetching services:",
+        JSON.stringify(servicesError, null, 2)
+      );
+    }
+
+    const allServices = services?.map((s) => s.service) || [];
+    const mainServices = [
+      "CONTROL_PANEL_ASSEMBLY",
+      "SYSTEM_INTEGRATION",
+      "CALIBRATION_SERVICES",
+    ];
+    const uniqueServices = [
+      ...new Set(allServices.filter((s) => mainServices.includes(s))),
+    ];
+
+    // Locations (hqState) — use camelCase column names
+    const { data: companies, error: companiesError } = await supabase
       .from("companies")
       .select("hqState")
-      .eq("status", "APPROVED")
-      .not("hqState", "is", null);
+      .eq("status", "APPROVED");
 
-    // Get available sizes
-    const { data: sizes } = await supabase
+    if (companiesError) {
+      console.error(
+        "Error fetching companies for locations:",
+        JSON.stringify(companiesError, null, 2)
+      );
+    }
+
+    const uniqueStates = [
+      ...new Set((companies || []).map((c: any) => c.hqState).filter(Boolean)),
+    ];
+
+    // Sizes (sizeBucket) — use camelCase column names
+    const { data: sizesData, error: sizesError } = await supabase
       .from("companies")
       .select("sizeBucket")
-      .eq("status", "APPROVED")
-      .not("sizeBucket", "is", null);
+      .eq("status", "APPROVED");
 
-    // Get available certifications
-    const { data: certifications } = await supabase
+    if (sizesError) {
+      console.error(
+        "Error fetching sizes:",
+        JSON.stringify(sizesError, null, 2)
+      );
+    }
+
+    const uniqueSizes = [
+      ...new Set(
+        (sizesData || []).map((c: any) => c.sizeBucket).filter(Boolean)
+      ),
+    ];
+
+    // Certifications
+    const { data: certifications, error: certificationsError } = await supabase
       .from("company_certifications")
       .select("certification");
 
-    // Remove duplicates and format
-    const uniqueServices = [...new Set(services?.map((s) => s.service) || [])];
-    const uniqueLocations = [
-      ...new Set(locations?.map((l) => l.hqState) || []),
-    ];
-    const uniqueSizes = [...new Set(sizes?.map((s) => s.sizeBucket) || [])];
+    if (certificationsError) {
+      console.error(
+        "Error fetching certifications:",
+        JSON.stringify(certificationsError, null, 2)
+      );
+    }
+
     const uniqueCertifications = [
       ...new Set(certifications?.map((c) => c.certification) || []),
     ];
 
+    console.log(
+      `✅ Filter options - Services: ${uniqueServices.length}, Locations: ${uniqueStates.length}, Sizes: ${uniqueSizes.length}, Certifications: ${uniqueCertifications.length}`
+    );
+
     return {
       services: uniqueServices.map((service) => ({ service })),
-      locations: uniqueLocations.map((hqState) => ({ hqState })),
+      locations: uniqueStates.map((hqState) => ({ hqState })),
       sizes: uniqueSizes.map((sizeBucket) => ({ sizeBucket })),
       certifications: uniqueCertifications.map((certification) => ({
         certification,
       })),
     };
   } catch (error) {
-    console.error("Error fetching filter options:", error);
-    // Return fallback data
+    console.error("Error in getFilterOptions:", error);
+    // Fallbacks
     return {
       services: [
         { service: "CONTROL_PANEL_ASSEMBLY" },
@@ -207,385 +480,111 @@ export async function getFilterOptions() {
         { hqState: "FL" },
         { hqState: "NY" },
         { hqState: "PA" },
+        { hqState: "IL" },
+        { hqState: "OH" },
+        { hqState: "GA" },
+        { hqState: "NC" },
+        { hqState: "MI" },
       ],
       sizes: [
         { sizeBucket: "SIZE_1_10" },
         { sizeBucket: "SIZE_11_50" },
         { sizeBucket: "SIZE_51_200" },
         { sizeBucket: "SIZE_201_500" },
-        { sizeBucket: "SIZE_501_PLUS" },
+        { sizeBucket: "SIZE_501_1000" },
+        { sizeBucket: "SIZE_1001_5000" },
+        { sizeBucket: "SIZE_5001_10000" },
+        { sizeBucket: "SIZE_10000_PLUS" },
       ],
       certifications: [
         { certification: "UL_508A" },
         { certification: "ISO_9001" },
         { certification: "ISO_14001" },
+        { certification: "OHSAS_18001" },
+        { certification: "IEC_61511" },
+        { certification: "ISA_84" },
+        { certification: "NFPA_70E" },
+        { certification: "OSHA_10" },
+        { certification: "OSHA_30" },
+        { certification: "SIL_CERTIFIED" },
       ],
     };
   }
 }
 
-export async function createCompany(
-  companyData: {
-    name: string;
-    description: string | null;
-    websiteUrl: string | null;
-    logoUrl?: string | null;
-    phone: string | null;
-    salesEmail: string | null;
-    hqAddress: string | null;
-    hqCity: string | null;
-    hqState: string | null;
-    hqZip: string | null;
-    hqCountry: string;
-    yearFounded?: number | null;
-    sizeBucket: string | null;
-    services: string[];
-    certifications: string[];
-    locations_served: Array<{
-      country: string;
-      state?: string;
-      region?: string;
-    }>;
-  },
-  userId: string
-) {
-  const supabase = await createClient();
-
+export async function createCompany(companyData: Partial<Company>) {
   try {
-    // Create the company
-    const { data: company, error: companyError } = await supabase
+    const supabase = await createClient();
+
+    // Use camelCase column names for insert
+    const { data, error } = await supabase
       .from("companies")
-      .insert({
-        name: companyData.name,
-        description: companyData.description,
-        websiteUrl: companyData.websiteUrl,
-        logoUrl: companyData.logoUrl,
-        phone: companyData.phone,
-        salesEmail: companyData.salesEmail,
-        hqAddress: companyData.hqAddress,
-        hqCity: companyData.hqCity,
-        hqState: companyData.hqState,
-        hqZip: companyData.hqZip,
-        hqCountry: companyData.hqCountry,
-        yearFounded: companyData.yearFounded,
-        sizeBucket: companyData.sizeBucket,
-        status: "PENDING",
-      })
+      .insert([
+        {
+          name: companyData.name,
+          slug: companyData.slug,
+          description: companyData.description,
+          logoUrl: companyData.logoUrl,
+          websiteUrl: companyData.websiteUrl,
+          phone: companyData.phone,
+          salesEmail: companyData.salesEmail,
+          hqCity: companyData.hqCity,
+          hqState: companyData.hqState,
+          hqCountry: companyData.hqCountry,
+          yearFounded: companyData.yearFounded,
+          sizeBucket: companyData.sizeBucket,
+          status: companyData.status || "PENDING",
+        },
+      ])
       .select()
       .single();
 
-    if (companyError) throw companyError;
-
-    // Create user-company relationship
-    const { error: relationError } = await supabase
-      .from("user_companies")
-      .insert({
-        userId: userId,
-        companyId: company.id,
-        relation: "OWNER",
-      });
-
-    if (relationError) throw relationError;
-
-    // Add services
-    if (companyData.services.length > 0) {
-      const servicesData = companyData.services.map((service) => ({
-        companyId: company.id,
-        service,
-      }));
-
-      const { error: servicesError } = await supabase
-        .from("company_services")
-        .insert(servicesData);
-
-      if (servicesError) throw servicesError;
+    if (error) {
+      console.error("Error creating company:", JSON.stringify(error, null, 2));
+      return null;
     }
 
-    // Add certifications
-    if (companyData.certifications.length > 0) {
-      const certificationsData = companyData.certifications.map(
-        (certification) => ({
-          companyId: company.id,
-          certification,
-        })
-      );
-
-      const { error: certificationsError } = await supabase
-        .from("company_certifications")
-        .insert(certificationsData);
-
-      if (certificationsError) throw certificationsError;
-    }
-
-    // Add locations served
-    if (companyData.locations_served.length > 0) {
-      const locationsData = companyData.locations_served.map((location) => ({
-        companyId: company.id,
-        country: location.country,
-        state: location.state,
-        region: location.region,
-      }));
-
-      const { error: locationsError } = await supabase
-        .from("company_locations_served")
-        .insert(locationsData);
-
-      if (locationsError) throw locationsError;
-    }
-
-    return { success: true, company };
+    return data;
   } catch (error) {
-    console.error("Error creating company:", error);
-    throw error;
+    console.error("Error in createCompany:", error);
+    return null;
   }
 }
 
-export async function updateCompany(
-  companyId: string,
-  companyData: {
-    name: string;
-    description: string | null;
-    websiteUrl: string | null;
-    logoUrl?: string | null;
-    phone: string | null;
-    salesEmail: string | null;
-    hqAddress: string | null;
-    hqCity: string | null;
-    hqState: string | null;
-    hqZip: string | null;
-    hqCountry: string;
-    yearFounded?: number | null;
-    sizeBucket: string | null;
-    services: string[];
-    certifications: string[];
-    locations_served: Array<{
-      country: string;
-      state?: string;
-      region?: string;
-    }>;
-  }
-) {
-  const supabase = await createClient();
-
+export async function updateCompany(id: string, companyData: Partial<Company>) {
   try {
-    // Update company basic info
-    const { error: companyError } = await supabase
+    const supabase = await createClient();
+
+    // Use camelCase column names for update
+    const { data, error } = await supabase
       .from("companies")
       .update({
         name: companyData.name,
+        slug: companyData.slug,
         description: companyData.description,
-        websiteUrl: companyData.websiteUrl,
         logoUrl: companyData.logoUrl,
+        websiteUrl: companyData.websiteUrl,
         phone: companyData.phone,
         salesEmail: companyData.salesEmail,
-        hqAddress: companyData.hqAddress,
         hqCity: companyData.hqCity,
         hqState: companyData.hqState,
-        hqZip: companyData.hqZip,
         hqCountry: companyData.hqCountry,
         yearFounded: companyData.yearFounded,
         sizeBucket: companyData.sizeBucket,
-        updatedAt: new Date().toISOString(),
+        status: companyData.status,
       })
-      .eq("id", companyId);
-
-    if (companyError) throw companyError;
-
-    // Update services - delete existing and insert new
-    await supabase.from("company_services").delete().eq("companyId", companyId);
-
-    if (companyData.services.length > 0) {
-      const servicesData = companyData.services.map((service) => ({
-        companyId: companyId,
-        service,
-      }));
-
-      const { error: servicesError } = await supabase
-        .from("company_services")
-        .insert(servicesData);
-
-      if (servicesError) throw servicesError;
-    }
-
-    // Update certifications
-    await supabase
-      .from("company_certifications")
-      .delete()
-      .eq("companyId", companyId);
-
-    if (companyData.certifications.length > 0) {
-      const certificationsData = companyData.certifications.map(
-        (certification) => ({
-          companyId: companyId,
-          certification,
-        })
-      );
-
-      const { error: certificationsError } = await supabase
-        .from("company_certifications")
-        .insert(certificationsData);
-
-      if (certificationsError) throw certificationsError;
-    }
-
-    // Update locations served
-    await supabase
-      .from("company_locations_served")
-      .delete()
-      .eq("companyId", companyId);
-
-    if (companyData.locations_served.length > 0) {
-      const locationsData = companyData.locations_served.map((location) => ({
-        companyId: companyId,
-        country: location.country,
-        state: location.state,
-        region: location.region,
-      }));
-
-      const { error: locationsError } = await supabase
-        .from("company_locations_served")
-        .insert(locationsData);
-
-      if (locationsError) throw locationsError;
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error("Error updating company:", error);
-    throw error;
-  }
-}
-
-export async function getUserCompanies(userId: string) {
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("user_companies")
-    .select(
-      `
-      id,
-      relation,
-      createdAt,
-      company:companies(
-        id,
-        name,
-        slug,
-        description,
-        websiteUrl,
-        logoUrl,
-        phone,
-        salesEmail,
-        hqAddress,
-        hqCity,
-        hqState,
-        hqZip,
-        hqCountry,
-        yearFounded,
-        sizeBucket,
-        status,
-        createdAt,
-        updatedAt
-      )
-    `
-    )
-    .eq("userId", userId)
-    .order("createdAt", { ascending: false });
-
-  if (error) {
-    console.error("Error fetching user companies:", error);
-    return [];
-  }
-
-  return data || [];
-}
-
-export async function getCompanyBySlug(
-  slug: string
-): Promise<CompanyWithRelations | null> {
-  const supabase = await createClient();
-
-  try {
-    // First, let's try a simple query to see if the company exists
-    console.log("Searching for company with slug:", slug);
-
-    const { data: basicCompany, error: basicError } = await supabase
-      .from("companies")
-      .select("*")
-      .eq("slug", slug)
-      .eq("status", "APPROVED")
+      .eq("id", id)
+      .select()
       .single();
 
-    if (basicError) {
-      console.error("Basic company query error:", basicError);
+    if (error) {
+      console.error("Error updating company:", JSON.stringify(error, null, 2));
       return null;
     }
 
-    if (!basicCompany) {
-      console.log("No company found with slug:", slug);
-      return null;
-    }
-
-    console.log("Found basic company:", basicCompany.name);
-    console.log("Company data fields:", Object.keys(basicCompany));
-    console.log("Sales email:", basicCompany.salesEmail);
-    console.log("Logo URL:", basicCompany.logoUrl);
-    console.log("Website URL:", basicCompany.websiteUrl);
-
-    // Now get the related data separately using the correct column names
-    const [servicesResult, certificationsResult, locationsResult] =
-      await Promise.all([
-        supabase
-          .from("company_services")
-          .select("service")
-          .eq("companyId", basicCompany.id),
-
-        supabase
-          .from("company_certifications")
-          .select("certification")
-          .eq("companyId", basicCompany.id),
-
-        supabase
-          .from("company_locations_served")
-          .select("country, state, region")
-          .eq("companyId", basicCompany.id),
-      ]);
-
-    // Handle any errors in the related queries
-    if (servicesResult.error) {
-      console.error("Services query error:", servicesResult.error);
-    }
-    if (certificationsResult.error) {
-      console.error("Certifications query error:", certificationsResult.error);
-    }
-    if (locationsResult.error) {
-      console.error("Locations query error:", locationsResult.error);
-    }
-
-    console.log("Services data:", servicesResult.data);
-    console.log("Certifications data:", certificationsResult.data);
-    console.log("Locations data:", locationsResult.data);
-
-    // Combine the results
-    const company: CompanyWithRelations = {
-      ...basicCompany,
-      services: servicesResult.data || [],
-      certifications: certificationsResult.data || [],
-      locationsServed: locationsResult.data || [],
-    };
-
-    console.log("Final company object:", {
-      name: company.name,
-      salesEmail: company.salesEmail,
-      logoUrl: company.logoUrl,
-      websiteUrl: company.websiteUrl,
-      servicesCount: company.services.length,
-      certificationsCount: company.certifications.length,
-      locationsCount: company.locationsServed.length,
-    });
-
-    return company;
+    return data;
   } catch (error) {
-    console.error("Error in getCompanyBySlug:", error);
+    console.error("Error in updateCompany:", error);
     return null;
   }
 }
