@@ -65,18 +65,18 @@ export default async function AdminCompaniesPage() {
     redirect("/auth/login")
   }
 
-  // Check if user is admin from your app's users table
-  const { data: dbUser, error: userError } = await supabase
-    .from("users")
-    .select("role")
-    .eq("id", user.id)
-    .single()
+  // Check admin flag from a simple admin_flags table
+  const { data: adminFlag, error: adminError } = await supabase
+    .from("admin_flags")
+    .select("is_admin")
+    .eq("user_id", user.id)
+    .maybeSingle()
 
-  if (userError) {
-    console.error("Error fetching user role:", JSON.stringify(userError, null, 2))
+  if (adminError) {
+    console.error("Error fetching admin flag:", JSON.stringify(adminError, null, 2))
   }
 
-  if (!dbUser || dbUser.role !== "ADMIN") {
+  if (!adminFlag?.is_admin) {
     redirect("/dashboard")
   }
 
