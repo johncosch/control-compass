@@ -1,54 +1,58 @@
-import { prisma } from "@/lib/prisma"
+import { createClient } from "@/lib/supabase/server"
 import { ApprovalActions } from "@/components/domain/admin/approval-actions"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import Image from "next/image"
-import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 
+// Fetch all pending companies with related data using Supabase
 async function getPendingCompanies() {
-  try {
-    const companies = await prisma.company.findMany({
-      where: {
-        status: "PENDING",
-      },
-      include: {
-        userCompanies: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-                name: true,
-              },
-            },
-          },
-        },
-        services: {
-          select: { service: true },
-        },
-        industries: {
-          select: { industry: true },
-        },
-        certifications: {
-          select: { certification: true },
-        },
-        locationsServed: {
-          select: { country: true, state: true, region: true },
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    })
+  const supabase = await createClient()
 
-    return companies
-  } catch (error) {
-    console.error("Error fetching pending companies:", error)
+  const { data, error } = await supabase
+    .from("companies")
+    .select(
+      `
+      id,
+      name,
+      slug,
+      description,
+      websiteUrl,
+      logoUrl,
+      phone,
+      salesEmail,
+      hqCity,
+      hqState,
+      hqCountry,
+      yearFounded,
+      sizeBucket,
+      status,
+      createdAt,
+      services:company_services ( service ),
+      industries:company_industries ( industry ),
+      certifications:company_certifications ( certification ),
+      locationsServed:company_locations_served ( country, state, region ),
+      userCompanies:user_companies (
+        relation,
+        user:users (
+          id,
+          email,
+          name
+        )
+      )
+    `
+    )
+    .eq("status", "PENDING")
+    .order("createdAt", { ascending: false })
+
+  if (error) {
+    console.error("Error fetching pending companies (Supabase):", JSON.stringify(error, null, 2))
     return []
   }
+
+  return data ?? []
 }
 
 export default async function AdminCompaniesPage() {
@@ -61,11 +65,16 @@ export default async function AdminCompaniesPage() {
     redirect("/auth/login")
   }
 
-  // Check if user is admin
-  const dbUser = await prisma.user.findUnique({
-    where: { id: user.id },
-    select: { role: true },
-  })
+  // Check if user is admin from your app's users table
+  const { data: dbUser, error: userError } = await supabase
+    .from("users")
+    .select("role")
+    .eq("id", user.id)
+    .single()
+
+  if (userError) {
+    console.error("Error fetching user role:", JSON.stringify(userError, null, 2))
+  }
 
   if (!dbUser || dbUser.role !== "ADMIN") {
     redirect("/dashboard")
@@ -88,7 +97,6 @@ export default async function AdminCompaniesPage() {
                 className="h-12 w-auto"
               />
             </Link>
-
             <div className="flex gap-3 items-center">
               <span className="text-sm text-slate-600">{user.user_metadata?.full_name || user.email}</span>
               <Button
@@ -118,8 +126,8 @@ export default async function AdminCompaniesPage() {
           </Card>
         ) : (
           <div className="space-y-6">
-            {companies.map((company) => {
-              const submitter = company.userCompanies[0]?.user
+            {companies.map((company: any) => {
+              const submitter = company.userCompanies?.[0]?.user
 
               return (
                 <Card key={company.id} className="overflow-hidden">
@@ -131,7 +139,7 @@ export default async function AdminCompaniesPage() {
                           Submitted by {submitter?.name || submitter?.email || "Unknown"}
                         </p>
                         <p className="text-sm text-slate-500 mt-1">
-                          {new Date(company.createdAt).toLocaleDateString()}
+                          {company.createdAt ? new Date(company.createdAt).toLocaleDateString() : ""}
                         </p>
                       </div>
                       <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
@@ -139,7 +147,6 @@ export default async function AdminCompaniesPage() {
                       </Badge>
                     </div>
                   </CardHeader>
-
                   <CardContent className="p-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* Company Details */}
@@ -194,11 +201,11 @@ export default async function AdminCompaniesPage() {
                       <div>
                         <h3 className="font-semibold text-slate-900 mb-3">Services & Industries</h3>
 
-                        {company.services.length > 0 && (
+                        {company.services?.length > 0 && (
                           <div className="mb-4">
                             <h4 className="font-medium text-slate-700 mb-2">Services</h4>
                             <div className="flex flex-wrap gap-1">
-                              {company.services.map((service) => (
+                              {company.services.map((service: any) => (
                                 <Badge key={service.service} variant="outline" className="text-xs">
                                   {service.service.replace(/_/g, " ")}
                                 </Badge>
@@ -207,11 +214,11 @@ export default async function AdminCompaniesPage() {
                           </div>
                         )}
 
-                        {company.industries.length > 0 && (
+                        {company.industries?.length > 0 && (
                           <div className="mb-4">
                             <h4 className="font-medium text-slate-700 mb-2">Industries</h4>
                             <div className="flex flex-wrap gap-1">
-                              {company.industries.map((industry) => (
+                              {company.industries.map((industry: any) => (
                                 <Badge key={industry.industry} variant="outline" className="text-xs">
                                   {industry.industry.replace(/_/g, " ")}
                                 </Badge>
@@ -220,11 +227,11 @@ export default async function AdminCompaniesPage() {
                           </div>
                         )}
 
-                        {company.certifications.length > 0 && (
+                        {company.certifications?.length > 0 && (
                           <div>
                             <h4 className="font-medium text-slate-700 mb-2">Certifications</h4>
                             <div className="flex flex-wrap gap-1">
-                              {company.certifications.map((cert) => (
+                              {company.certifications.map((cert: any) => (
                                 <Badge key={cert.certification} variant="outline" className="text-xs">
                                   {cert.certification.replace(/_/g, " ")}
                                 </Badge>

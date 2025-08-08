@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/server"
-import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -8,19 +7,94 @@ import Link from "next/link"
 import Image from "next/image"
 
 async function getUserCompanies(userId: string) {
-  const userCompanies = await prisma.userCompany.findMany({
-    where: {
-      userId: userId,
-    },
-    include: {
-      company: true,
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-  })
+  const supabase = await createClient()
 
-  return userCompanies
+  // 1) Fetch user-company relations (try camelCase then snake_case)
+  const tables = ["userCompanies", "user_companies"] as const
+
+  let userCompaniesRes:
+    | Array<{
+        id: string
+        userId?: string
+        companyId: string
+        relation: "OWNER" | "MEMBER" | string
+        createdAt: string
+      }>
+    | null = null
+  let lastError: unknown = null
+
+  for (const table of tables) {
+    const { data, error } = await supabase
+      .from(table)
+      .select("id, companyId, relation, createdAt")
+      .eq("userId", userId)
+      .order("createdAt", { ascending: false })
+
+    if (!error) {
+      userCompaniesRes = data ?? []
+      break
+    } else {
+      lastError = error
+    }
+  }
+
+  if (!userCompaniesRes) {
+    console.error("Error fetching user companies:", lastError)
+    return []
+  }
+
+  if (userCompaniesRes.length === 0) {
+    return []
+  }
+
+  // 2) Fetch companies in a single query
+  const companyIds = Array.from(
+    new Set(userCompaniesRes.map((uc) => uc.companyId).filter(Boolean))
+  )
+
+  if (companyIds.length === 0) {
+    return []
+  }
+
+  const { data: companies, error: companiesError } = await supabase
+    .from("companies")
+    .select("id, name, slug, logoUrl, hqCity, hqState, status")
+    .in("id", companyIds)
+
+  if (companiesError) {
+    console.error(
+      "Error fetching companies for user companies:",
+      JSON.stringify(companiesError, null, 2)
+    )
+    return []
+  }
+
+  const companyById = new Map((companies ?? []).map((c) => [c.id, c]))
+
+  // 3) Join into the UI shape your component expects
+  const joined = userCompaniesRes
+    .map((uc) => ({
+      id: uc.id,
+      relation: uc.relation,
+      createdAt: uc.createdAt,
+      company: companyById.get(uc.companyId),
+    }))
+    .filter((uc) => uc.company)
+
+  return joined as Array<{
+    id: string
+    relation: "OWNER" | "MEMBER" | string
+    createdAt: string
+    company: {
+      id: string
+      name: string
+      slug: string | null
+      logoUrl: string | null
+      hqCity: string | null
+      hqState: string | null
+      status: "APPROVED" | "PENDING" | "REJECTED" | string
+    }
+  }>
 }
 
 export default async function DashboardPage() {
@@ -72,27 +146,31 @@ export default async function DashboardPage() {
                     <CardHeader>
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-4">
-                          {uc.company.logoUrl ? (
+                          {uc.company?.logoUrl ? (
                             <Image
                               src={uc.company.logoUrl || "/placeholder.svg"}
-                              alt={`${uc.company.name} logo`}
+                              alt={`${uc.company?.name} logo`}
                               width={60}
                               height={60}
                               className="rounded-lg object-contain bg-stone-100 p-2"
                             />
                           ) : (
                             <div className="w-15 h-15 bg-slate-100 rounded-lg flex items-center justify-center">
-                              <span className="text-slate-700 font-semibold text-lg">{uc.company.name.charAt(0)}</span>
+                              <span className="text-slate-700 font-semibold text-lg">
+                                {uc.company?.name.charAt(0)}
+                              </span>
                             </div>
                           )}
                           <div>
-                            <CardTitle className="text-xl text-slate-900">{uc.company.name}</CardTitle>
+                            <CardTitle className="text-xl text-slate-900">{uc.company?.name}</CardTitle>
                             <p className="text-slate-600 mt-1">
-                              {uc.company.hqCity && uc.company.hqState && `${uc.company.hqCity}, ${uc.company.hqState}`}
+                              {uc.company?.hqCity && uc.company?.hqState
+                                ? `${uc.company?.hqCity}, ${uc.company?.hqState}`
+                                : ""}
                             </p>
                             <div className="flex items-center gap-2 mt-2">
-                              <Badge variant={uc.company.status === "APPROVED" ? "default" : "secondary"}>
-                                {uc.company.status}
+                              <Badge variant={uc.company?.status === "APPROVED" ? "default" : "secondary"}>
+                                {uc.company?.status}
                               </Badge>
                               <Badge variant="outline">OWNER</Badge>
                             </div>
@@ -101,14 +179,14 @@ export default async function DashboardPage() {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      {uc.company.status === "PENDING" && (
+                      {uc.company?.status === "PENDING" && (
                         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
                           <p className="text-yellow-800 text-sm">
                             Your company is pending review. We'll notify you once it's approved.
                           </p>
                         </div>
                       )}
-                      {uc.company.status === "REJECTED" && (
+                      {uc.company?.status === "REJECTED" && (
                         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
                           <p className="text-red-800 text-sm">
                             Your company submission was rejected. Please contact support for more information.
@@ -116,13 +194,13 @@ export default async function DashboardPage() {
                         </div>
                       )}
                       <div className="flex gap-3">
-                        <Link href={`/dashboard/company/${uc.company.id}/manage`}>
+                        <Link href={`/dashboard/company/${uc.company?.id}/manage`}>
                           <Button variant="outline" size="sm">
                             Manage Company
                           </Button>
                         </Link>
-                        {uc.company.status === "APPROVED" && (
-                          <Link href={`/companies/${uc.company.slug}`}>
+                        {uc.company?.status === "APPROVED" && (
+                          <Link href={`/companies/${uc.company?.slug}`}>
                             <Button variant="outline" size="sm">
                               View Public Page
                             </Button>
@@ -141,10 +219,10 @@ export default async function DashboardPage() {
                         <CardHeader>
                           <div className="flex items-start justify-between">
                             <div className="flex items-start gap-4">
-                              {uc.company.logoUrl ? (
+                              {uc.company?.logoUrl ? (
                                 <Image
                                   src={uc.company.logoUrl || "/placeholder.svg"}
-                                  alt={`${uc.company.name} logo`}
+                                  alt={`${uc.company?.name} logo`}
                                   width={60}
                                   height={60}
                                   className="rounded-lg object-contain bg-stone-100 p-2"
@@ -152,20 +230,20 @@ export default async function DashboardPage() {
                               ) : (
                                 <div className="w-15 h-15 bg-slate-100 rounded-lg flex items-center justify-center">
                                   <span className="text-slate-700 font-semibold text-lg">
-                                    {uc.company.name.charAt(0)}
+                                    {uc.company?.name.charAt(0)}
                                   </span>
                                 </div>
                               )}
                               <div>
-                                <CardTitle className="text-xl text-slate-900">{uc.company.name}</CardTitle>
+                                <CardTitle className="text-xl text-slate-900">{uc.company?.name}</CardTitle>
                                 <p className="text-slate-600 mt-1">
-                                  {uc.company.hqCity &&
-                                    uc.company.hqState &&
-                                    `${uc.company.hqCity}, ${uc.company.hqState}`}
+                                  {uc.company?.hqCity && uc.company?.hqState
+                                    ? `${uc.company?.hqCity}, ${uc.company?.hqState}`
+                                    : ""}
                                 </p>
                                 <div className="flex items-center gap-2 mt-2">
-                                  <Badge variant={uc.company.status === "APPROVED" ? "default" : "secondary"}>
-                                    {uc.company.status}
+                                  <Badge variant={uc.company?.status === "APPROVED" ? "default" : "secondary"}>
+                                    {uc.company?.status}
                                   </Badge>
                                   <Badge variant="outline">MEMBER</Badge>
                                 </div>
@@ -175,13 +253,13 @@ export default async function DashboardPage() {
                         </CardHeader>
                         <CardContent>
                           <div className="flex gap-3">
-                            <Link href={`/dashboard/company/${uc.company.id}/manage`}>
+                            <Link href={`/dashboard/company/${uc.company?.id}/manage`}>
                               <Button variant="outline" size="sm">
                                 Manage Company
                               </Button>
                             </Link>
-                            {uc.company.status === "APPROVED" && (
-                              <Link href={`/companies/${uc.company.slug}`}>
+                            {uc.company?.status === "APPROVED" && (
+                              <Link href={`/companies/${uc.company?.slug}`}>
                                 <Button variant="outline" size="sm">
                                   View Public Page
                                 </Button>

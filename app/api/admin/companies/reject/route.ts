@@ -1,30 +1,40 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
+// import { revalidatePath } from "next/cache" // Optional: revalidate lists after mutation
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
+
+    // Auth
     const {
       data: { user },
+      error: authError,
     } = await supabase.auth.getUser();
-
+    if (authError) {
+      console.error("Auth error:", authError);
+    }
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Check if user is admin
-    const dbUser = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: { role: true },
-    });
+    // Admin check (users table with role column)
+    const { data: dbUser, error: userError } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", user.id)
+      .single();
 
+    if (userError) {
+      console.error("Error fetching user role:", userError);
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     if (!dbUser || dbUser.role !== "ADMIN") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    // Payload
     const { companyId } = await request.json();
-
     if (!companyId) {
       return NextResponse.json(
         { error: "Company ID is required" },
@@ -32,11 +42,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update company status to rejected
-    const updatedCompany = await prisma.company.update({
-      where: { id: companyId },
-      data: { status: "REJECTED" },
-    });
+    // Update company to REJECTED
+    const { data: updatedCompany, error: updateError } = await supabase
+      .from("companies")
+      .update({
+        status: "REJECTED",
+        updatedAt: new Date().toISOString(),
+      })
+      .eq("id", companyId)
+      .select("*")
+      .single();
+
+    if (updateError || !updatedCompany) {
+      console.error("Error updating company status to REJECTED:", updateError);
+      return NextResponse.json(
+        { error: "Failed to reject company" },
+        { status: 500 }
+      );
+    }
+
+    // Optional: revalidate admin list page
+    // await revalidatePath("/admin/companies")
 
     return NextResponse.json({ success: true, company: updatedCompany });
   } catch (error) {

@@ -39,14 +39,18 @@ export async function updateCompany(
   }
 
   // Verify user owns this company or is a member
-  const { data: userCompany } = await supabase
+  const { data: userCompany, error: userCompanyError } = await supabase
     .from("user_companies")
     .select("relation")
     .eq("userId", user.id)
     .eq("companyId", companyId)
     .single();
 
-  if (!userCompany || !["OWNER", "MEMBER"].includes(userCompany.relation)) {
+  if (
+    userCompanyError ||
+    !userCompany ||
+    !["OWNER", "MEMBER"].includes(userCompany.relation)
+  ) {
     throw new Error("You don't have permission to edit this company");
   }
 

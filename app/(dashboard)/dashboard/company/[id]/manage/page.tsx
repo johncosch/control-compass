@@ -3,12 +3,11 @@ import { redirect } from "next/navigation"
 import { CompanyManagementForm } from "@/src/components/domain/company/company-management-form"
 
 interface ManageCompanyPageProps {
-  params: {
-    id: string
-  }
+  params: Promise<{ id: string }>
 }
 
 export default async function ManageCompanyPage({ params }: ManageCompanyPageProps) {
+  const { id } = await params
   const supabase = await createClient()
 
   const {
@@ -20,7 +19,7 @@ export default async function ManageCompanyPage({ params }: ManageCompanyPagePro
   }
 
   // Check if user has permission to manage this company
-  const { data: userCompany } = await supabase
+  const { data: userCompany, error } = await supabase
     .from("user_companies")
     .select(`
       relation,
@@ -46,10 +45,10 @@ export default async function ManageCompanyPage({ params }: ManageCompanyPagePro
       )
     `)
     .eq("userId", user.id)
-    .eq("companyId", params.id)
+    .eq("companyId", id)
     .single()
 
-  if (!userCompany?.company) {
+  if (error || !userCompany?.company) {
     redirect("/dashboard")
   }
 
