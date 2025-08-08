@@ -4,6 +4,11 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "crypto";
 
+// Hardcoded email settings (simple + reliable)
+const ADMIN_REVIEW_URL = "https://www.controlcompass.io/admin/companies";
+const EMAIL_TO = "johnj@iothrifty.com";
+const EMAIL_FROM = "noreply@controlcompass.io"; // make sure this domain is verified in Resend
+
 interface CompanyFormData {
   name: string;
   description: string;
@@ -61,12 +66,11 @@ export async function createCompanyAction(formData: CompanyFormData) {
       console.error("Slug check error:", slugCheckError);
       throw new Error("Failed to verify slug uniqueness");
     }
-
     if (!count || count === 0) break;
     uniqueSlug = `${baseSlug}-${i + 1}`;
   }
 
-  // 3) Insert company with explicit id (avoid NOT NULL/uuid default issues)
+  // 3) Insert company with explicit id (avoid NOT NULL/default issues)
   const companyId = randomUUID();
   const nowIso = new Date().toISOString();
 
@@ -163,48 +167,81 @@ export async function createCompanyAction(formData: CompanyFormData) {
     throw new Error("Failed to link user to company");
   }
 
-  // 8) Send admin notification email via Route Handler
+  // 8) Send admin notification email (hardcoded, direct via Resend)
   try {
-    const baseUrl =
-      process.env.NEXT_PUBLIC_APP_URL ||
-      (process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
-        : "http://localhost:3000");
-
-    const adminUrl = `${baseUrl}/admin/companies/${companyId}`;
-    const payload = {
-      companyName: company.name,
-      companyId,
-      userEmail: user.email,
-      adminUrl,
-    };
-
-    console.log(
-      "[notify-new-company] Calling route with:",
-      payload,
-      "baseUrl:",
-      baseUrl
-    );
-
-    const response = await fetch(`${baseUrl}/api/admin/notify-new-company`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      console.error(
-        "[notify-new-company] Failed:",
-        response.status,
-        response.statusText,
-        text
+    const { Resend } = await import("resend");
+    if (!process.env.RESEND_API_KEY) {
+      console.warn(
+        "[notify-new-company] RESEND_API_KEY not set; skipping email send"
       );
     } else {
-      console.log("[notify-new-company] Sent successfully");
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      const html = `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>New Company Pending Approval</title>
+  </head>
+  <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+      <h1 style="color: white; margin: 0; font-size: 28px;">Control Compass</h1>
+      <p style="color: #f0f0f0; margin: 10px 0 0 0; font-size: 16px;">Company Directory</p>
+    </div>
+
+    <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e9ecef;">
+      <h2 style="color: #495057; margin-top: 0;">New Company Pending Approval</h2>
+
+      <div style="background: white; padding: 20px; border-radius: 8px; border-left: 4px solid #667eea; margin: 20px 0;">
+        <h3 style="margin-top: 0; color: #495057;">Company Details</h3>
+        <p><strong>Company Name:</strong> ${company.name}</p>
+        <p><strong>Company ID:</strong> ${companyId}</p>
+        <p><strong>Submitted by:</strong> ${user.email || "Unknown"}</p>
+        <p><strong>Status:</strong> <span style="background: #ffc107; color: #212529; padding: 2px 8px; border-radius: 4px; font-size: 12px;">PENDING</span></p>
+      </div>
+
+      <p style="margin: 25px 0;">A new company has been submitted to the Control Compass directory and is awaiting your approval.</p>
+
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${ADMIN_REVIEW_URL}"
+           style="background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+          Review Companies →
+        </a>
+      </div>
+
+      <div style="background: #e9ecef; padding: 15px; border-radius: 6px; margin-top: 25px;">
+        <p style="margin: 0; font-size: 14px; color: #6c757d;">
+          <strong>Next Steps:</strong><br />
+          • Review the company information<br />
+          • Verify the details are accurate<br />
+          • Approve or reject the submission<br />
+          • The company owner will be notified of your decision
+        </p>
+      </div>
+    </div>
+
+    <div style="text-align: center; margin-top: 20px; padding: 20px; color: #6c757d; font-size: 12px;">
+      <p>This is an automated notification from Control Compass</p>
+      <p>© ${new Date().getFullYear()} Control Compass. All rights reserved.</p>
+    </div>
+  </body>
+</html>`;
+
+      const { error } = await resend.emails.send({
+        from: EMAIL_FROM,
+        to: [EMAIL_TO],
+        subject: `New Company Pending Approval: ${company.name}`,
+        html,
+      });
+
+      if (error) {
+        console.error("Resend send error:", JSON.stringify(error, null, 2));
+      } else {
+        console.log("[notify-new-company] Email sent to", EMAIL_TO);
+      }
     }
   } catch (emailError) {
-    console.error("[notify-new-company] Error calling route:", emailError);
+    console.error("[notify-new-company] Unexpected error:", emailError);
     // Do not throw; company creation should still succeed
   }
 
