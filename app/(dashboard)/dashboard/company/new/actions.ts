@@ -51,7 +51,6 @@ export async function createCompanyAction(formData: CompanyFormData) {
   // 2) Slug generation + uniqueness
   const baseSlug = generateSlug(formData.name);
   let uniqueSlug = baseSlug;
-
   for (let i = 0; i < 50; i++) {
     const { count, error: slugCheckError } = await supabase
       .from("companies")
@@ -67,7 +66,7 @@ export async function createCompanyAction(formData: CompanyFormData) {
     uniqueSlug = `${baseSlug}-${i + 1}`;
   }
 
-  // 3) Insert company with explicit id (DB may not have default)
+  // 3) Insert company with explicit id (avoid NOT NULL/uuid default issues)
   const companyId = randomUUID();
   const nowIso = new Date().toISOString();
 
@@ -88,7 +87,7 @@ export async function createCompanyAction(formData: CompanyFormData) {
       yearFounded: formData.year_founded,
       sizeBucket: formData.size_bucket,
       status: "PENDING",
-      updatedAt: nowIso, // <-- added
+      updatedAt: nowIso,
     })
     .select("id, slug, name")
     .single();
@@ -98,16 +97,14 @@ export async function createCompanyAction(formData: CompanyFormData) {
     throw new Error("Failed to create company");
   }
 
-  // 4) Insert services (with explicit ids to avoid missing defaults)
+  // 4) Insert services
   if (Array.isArray(formData.services) && formData.services.length > 0) {
-    const servicesRows = formData.services.map((service) => ({
+    const rows = formData.services.map((service) => ({
       id: randomUUID(),
       companyId,
       service,
     }));
-    const { error } = await supabase
-      .from("company_services")
-      .insert(servicesRows);
+    const { error } = await supabase.from("company_services").insert(rows);
     if (error) {
       console.error("Services insert error:", error);
       throw new Error("Failed to save services");
@@ -119,26 +116,26 @@ export async function createCompanyAction(formData: CompanyFormData) {
     Array.isArray(formData.certifications) &&
     formData.certifications.length > 0
   ) {
-    const certRows = formData.certifications.map((certification) => ({
+    const rows = formData.certifications.map((certification) => ({
       id: randomUUID(),
       companyId,
       certification,
     }));
     const { error } = await supabase
       .from("company_certifications")
-      .insert(certRows);
+      .insert(rows);
     if (error) {
       console.error("Certifications insert error:", error);
       throw new Error("Failed to save certifications");
     }
   }
 
-  // 6) Insert locations served (only those with at least state or region)
+  // 6) Insert locations served (only those with state or region)
   const locs = (formData.locations_served || []).filter(
     (loc) => loc.state !== undefined || loc.region !== undefined
   );
   if (locs.length > 0) {
-    const locRows = locs.map((loc) => ({
+    const rows = locs.map((loc) => ({
       id: randomUUID(),
       companyId,
       country: loc.country,
@@ -147,7 +144,7 @@ export async function createCompanyAction(formData: CompanyFormData) {
     }));
     const { error } = await supabase
       .from("company_locations_served")
-      .insert(locRows);
+      .insert(rows);
     if (error) {
       console.error("Locations insert error:", error);
       throw new Error("Failed to save locations");
@@ -166,27 +163,48 @@ export async function createCompanyAction(formData: CompanyFormData) {
     throw new Error("Failed to link user to company");
   }
 
-  // 8) Notify admin (non-blocking)
+  // 8) Send admin notification email via Route Handler
   try {
-    const adminUrl = `${process.env.NEXT_PUBLIC_APP_URL}/admin/companies/${companyId}`;
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL}/api/admin/notify-new-company`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          companyName: company.name,
-          companyId,
-          userEmail: user.email,
-          adminUrl,
-        }),
-      }
+    const baseUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : "http://localhost:3000");
+
+    const adminUrl = `${baseUrl}/admin/companies/${companyId}`;
+    const payload = {
+      companyName: company.name,
+      companyId,
+      userEmail: user.email,
+      adminUrl,
+    };
+
+    console.log(
+      "[notify-new-company] Calling route with:",
+      payload,
+      "baseUrl:",
+      baseUrl
     );
+
+    const response = await fetch(`${baseUrl}/api/admin/notify-new-company`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
     if (!response.ok) {
-      console.error("Failed to send admin notification email");
+      const text = await response.text().catch(() => "");
+      console.error(
+        "[notify-new-company] Failed:",
+        response.status,
+        response.statusText,
+        text
+      );
+    } else {
+      console.log("[notify-new-company] Sent successfully");
     }
   } catch (emailError) {
-    console.error("Error sending admin notification:", emailError);
+    console.error("[notify-new-company] Error calling route:", emailError);
     // Do not throw; company creation should still succeed
   }
 
